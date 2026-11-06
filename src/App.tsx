@@ -49,7 +49,7 @@ export default function App() {
   const [sheetUrlDraft, setSheetUrlDraft] = useState<string>(
     DEFAULT_GOOGLE_SHEET_URL
   );
-  const [isEditingSheetUrl, setIsEditingSheetUrl] = useState<boolean>(false);
+  const [isEditingSheetUrl, setIsEditingSheetUrl] = useState<boolean>(true);
   const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(true);
   const [secondsUntilSync, setSecondsUntilSync] = useState<number>(10);
   const [lastSyncedAt, setLastSyncedAt] = useState<string>(() =>
@@ -680,7 +680,17 @@ export default function App() {
                 </h1>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingSheetUrl((prev) => !prev)}
+                  className="px-3.5 py-2 text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  {googleSheetUrl
+                    ? `Live Sheet Connected (${secondsUntilSync}s)`
+                    : 'Connect Live Google Sheet (10s Sync)'}
+                </button>
                 <button
                   type="button"
                   onClick={handleExportCsv}
