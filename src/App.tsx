@@ -49,14 +49,14 @@ export default function App() {
   const [sheetUrlDraft, setSheetUrlDraft] = useState<string>(
     DEFAULT_GOOGLE_SHEET_URL
   );
-  const [isEditingSheetUrl, setIsEditingSheetUrl] = useState<boolean>(true);
+  const [isEditingSheetUrl, setIsEditingSheetUrl] = useState<boolean>(false);
   const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(true);
   const [secondsUntilSync, setSecondsUntilSync] = useState<number>(10);
   const [lastSyncedAt, setLastSyncedAt] = useState<string>(() =>
     new Date().toLocaleTimeString([], { hour12: false })
   );
   const [syncSourceLabel, setSyncSourceLabel] = useState<string>(
-    'Areas 31.10.2026 (Responses)'
+    'Google Sheet (199OwKQAdr…)'
   );
   const [syncError, setSyncError] = useState<string | undefined>(undefined);
   const isSyncingRef = useRef<boolean>(false);
@@ -520,15 +520,15 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      setSheetUrlDraft('');
-                      setGoogleSheetUrl('');
+                      setSheetUrlDraft(DEFAULT_GOOGLE_SHEET_URL);
+                      setGoogleSheetUrl(DEFAULT_GOOGLE_SHEET_URL);
                       localStorage.removeItem('jhang_survey_google_sheet_url');
                       setIsEditingSheetUrl(false);
-                      performSheetSync('');
+                      performSheetSync(DEFAULT_GOOGLE_SHEET_URL);
                     }}
                     className="px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 rounded"
                   >
-                    Use Default
+                    Reset Default
                   </button>
                   <button
                     type="submit"
@@ -547,11 +547,13 @@ export default function App() {
               <span>{totalPhotosCount} GPS Links</span>
               <span aria-hidden="true">·</span>
               <a
-                href={ATTACHED_CSV_ASSET_PATH}
-                download="Areas_31.10.2026_Responses.csv"
-                className="text-teal-700 hover:underline font-sans"
+                href={googleSheetUrl || DEFAULT_GOOGLE_SHEET_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-teal-700 hover:underline font-sans inline-flex items-center gap-0.5"
               >
-                Raw CSV
+                Open Sheet
+                <ExternalLink className="w-3 h-3" />
               </a>
             </div>
           </div>

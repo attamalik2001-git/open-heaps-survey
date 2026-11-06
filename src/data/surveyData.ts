@@ -34,7 +34,10 @@ export interface SurveyRecord {
   photoCount: number;
 }
 
-export const ATTACHED_CSV_ASSET_PATH = `${import.meta.env.BASE_URL}assets/aistudio/Areas_31.10_59fe9b4d.2026__Responses_`;
+export const PERMANENT_GOOGLE_SHEET_URL =
+  'https://docs.google.com/spreadsheets/d/199OwKQAdrDMENa2Ct8htmyk1sj8DY3WfK6K-jni-P7w/edit?usp=sharing';
+
+export const ATTACHED_CSV_ASSET_PATH = `${import.meta.env.BASE_URL}assets/aistudio/Areas_31.10_33ba403b.2026__Responses_`;
 
 export const RAW_SURVEY_CSV = `Timestamp,Tehsil,Union Council,Name of Chak/Mouza,Attach GPS Pictures
 10/31/2026 13:54:32,18-Hazari,83. UCH GUL IMAM,Burzi Wala Chak NO.11/3 UC Uchgulimam ,https://drive.google.com/open?id=1SRqGyHWk4GB5sqkjm4FWCxdmY-Cntk-K
@@ -95,7 +98,8 @@ export const RAW_SURVEY_CSV = `Timestamp,Tehsil,Union Council,Name of Chak/Mouza
 11/6/2026 12:08:27,18-Hazari,82. RODU SULTAN,Rodu sultan ,"https://drive.google.com/open?id=1t8vvQps_yHFNQ28IKpzADZ_o5HJQmHWS, https://drive.google.com/open?id=1pNnK5neSai8hlMh5VWzc1Yv2Jg_hLpN0, https://drive.google.com/open?id=1RwlgGZp7wJBHHW7oEIpvTEKR4pDPdx-m, https://drive.google.com/open?id=1FUXWj7Ur54vpG4NnkIwk4u57Y2R_eBPP, https://drive.google.com/open?id=1ZItxvrV598WmqtJNqzmQrfCz8dhZIpiT, https://drive.google.com/open?id=11kqsO3yFQQRVGgZWdh9sSjeZA48ibx2M, https://drive.google.com/open?id=16H2txAAI_jdCG85TqoXtpu5KTouRNLie, https://drive.google.com/open?id=1hsnuQSqv0zzM_7ZxwHifdSHb8LdkiuaV, https://drive.google.com/open?id=1SsjWHWzxT-ZyB2ivg-7SW2YJ2KxV4Z9R, https://drive.google.com/open?id=1JEeqdyBQ0coyZ2Z0RBSXLT72vw3Jovjx"
 11/6/2026 13:35:25,Jhang,23. CHAK NO. 463/JB,Chak no 442,"https://drive.google.com/open?id=1lnzrat8euY1om5Ml7x7AYajzuX9eAFNq, https://drive.google.com/open?id=1osNttm2Z_MHFEb2VYsfR8eu9Qob9dGZP"
 11/6/2026 13:44:18,Jhang,31. MASSAN,Massan ,https://drive.google.com/open?id=1YEm10NEWzMIkH6ulDrWFtv86bRUYOkwk
-11/6/2026 13:45:28,Jhang,38. RATA MATA SHUMALI,Sher Garh ,https://drive.google.com/open?id=1oq6kDTe7EaA69RMQjZsteXHFlV8cQ4JV`;
+11/6/2026 13:45:28,Jhang,38. RATA MATA SHUMALI,Sher Garh ,https://drive.google.com/open?id=1oq6kDTe7EaA69RMQjZsteXHFlV8cQ4JV
+11/6/2026 17:39:32,Jhang,01. CHAK NO. 159/JB,Chak No.161/JB,https://drive.google.com/open?id=1oZlU4bnO9KZe9IEj8vkQDPCiiZXUi7Sb`;
 
 /**
  * Extracts Google Drive file ID from various Google Drive URL formats
@@ -274,8 +278,8 @@ export const DEFAULT_GOOGLE_SHEET_URL =
   typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('sheet') ||
       localStorage.getItem('jhang_survey_google_sheet_url') ||
-      ''
-    : '';
+      PERMANENT_GOOGLE_SHEET_URL
+    : PERMANENT_GOOGLE_SHEET_URL;
 
 /**
  * Converts any Google Sheets URL (edit link, share link, pubhtml link, or Sheet ID)
