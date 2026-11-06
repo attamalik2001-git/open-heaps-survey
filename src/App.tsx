@@ -558,12 +558,15 @@ export default function App() {
             </div>
           </div>
 
-          {/* Tehsil Filter List */}
+          {/* Tehsil Filter Dropdown */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-900">
+              <label
+                htmlFor="sidebar-tehsil-select"
+                className="text-xs font-semibold text-slate-900"
+              >
                 Filter by Tehsil
-              </span>
+              </label>
               {selectedTehsil !== 'ALL' && (
                 <button
                   type="button"
@@ -571,98 +574,69 @@ export default function App() {
                     setSelectedTehsil('ALL');
                     setSelectedUc('ALL');
                   }}
-                  className="text-xs text-teal-700 hover:underline"
+                  className="text-xs text-teal-700 hover:underline cursor-pointer"
                 >
                   Clear
                 </button>
               )}
             </div>
-            <div className="space-y-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTehsil('ALL');
-                  setSelectedUc('ALL');
-                }}
-                className={`w-full px-3 py-2 text-xs rounded-lg flex items-center justify-between transition-colors ${
-                  selectedTehsil === 'ALL'
-                    ? 'bg-teal-700 text-white font-semibold'
-                    : 'text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <span>All Tehsils</span>
-                <span className="font-mono tabular-nums">{records.length}</span>
-              </button>
+            <select
+              id="sidebar-tehsil-select"
+              value={selectedTehsil}
+              onChange={(e) => {
+                setSelectedTehsil(e.target.value);
+                setSelectedUc('ALL');
+              }}
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700 transition-colors cursor-pointer"
+            >
+              <option value="ALL">All Tehsils ({records.length} entries)</option>
               {tehsilStats.map(([tehsilName, count]) => (
-                <button
-                  key={tehsilName}
-                  type="button"
-                  onClick={() => {
-                    setSelectedTehsil(tehsilName);
-                    setSelectedUc('ALL');
-                  }}
-                  className={`w-full px-3 py-2 text-xs rounded-lg flex items-center justify-between transition-colors ${
-                    selectedTehsil === tehsilName
-                      ? 'bg-teal-700 text-white font-semibold'
-                      : 'text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <span className="truncate">{tehsilName}</span>
-                  <span className="font-mono tabular-nums">{count}</span>
-                </button>
+                <option key={tehsilName} value={tehsilName}>
+                  {tehsilName} ({count} entries)
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
-          {/* Union Council Directory Filter */}
-          <div className="flex-1 flex flex-col min-h-0">
+          {/* Union Council Filter Dropdown */}
+          <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-900">
+              <label
+                htmlFor="sidebar-uc-select"
+                className="text-xs font-semibold text-slate-900"
+              >
                 Union Councils ({ucStats.length})
-              </span>
+              </label>
               {selectedUc !== 'ALL' && (
                 <button
                   type="button"
                   onClick={() => setSelectedUc('ALL')}
-                  className="text-xs text-teal-700 hover:underline"
+                  className="text-xs text-teal-700 hover:underline cursor-pointer"
                 >
                   All UCs
                 </button>
               )}
             </div>
-            <div className="space-y-1 max-h-[340px] lg:max-h-[420px] overflow-y-auto pr-1">
-              <button
-                type="button"
-                onClick={() => setSelectedUc('ALL')}
-                className={`w-full px-2.5 py-1.5 text-xs rounded-md flex items-center justify-between transition-colors ${
-                  selectedUc === 'ALL'
-                    ? 'bg-slate-900 text-white font-medium'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <span>All Union Councils</span>
-                <span className="font-mono tabular-nums">
-                  {ucStats.reduce((s, u) => s + u.recordCount, 0)}
-                </span>
-              </button>
+            <select
+              id="sidebar-uc-select"
+              value={selectedUc}
+              onChange={(e) => setSelectedUc(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700 transition-colors cursor-pointer"
+            >
+              <option value="ALL">
+                All Union Councils ({ucStats.reduce((s, u) => s + u.recordCount, 0)} entries)
+              </option>
               {ucStats.map((uc) => (
-                <button
-                  key={uc.ucRaw}
-                  type="button"
-                  onClick={() => setSelectedUc(uc.ucRaw)}
-                  className={`w-full px-2.5 py-1.5 text-xs rounded-md flex items-center justify-between gap-2 transition-colors text-left ${
-                    selectedUc === uc.ucRaw
-                      ? 'bg-slate-900 text-white font-medium'
-                      : 'text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <span className="truncate">{uc.ucRaw}</span>
-                  <span className="font-mono tabular-nums text-[11px] opacity-75 shrink-0">
-                    {uc.recordCount} · {uc.photoCount}p
-                  </span>
-                </button>
+                <option key={uc.ucRaw} value={uc.ucRaw}>
+                  {uc.ucRaw} ({uc.recordCount} entries · {uc.photoCount}p)
+                </option>
               ))}
-            </div>
+            </select>
+            {selectedUc !== 'ALL' && (
+              <p className="mt-2 text-[11px] text-slate-500 font-mono tabular-nums">
+                Active filter: {selectedUc}
+              </p>
+            )}
           </div>
         </aside>
 
@@ -869,14 +843,49 @@ export default function App() {
                   Filters:
                 </span>
 
+                {/* Tehsil Dropdown */}
+                <select
+                  aria-label="Filter by Tehsil"
+                  value={selectedTehsil}
+                  onChange={(e) => {
+                    setSelectedTehsil(e.target.value);
+                    setSelectedUc('ALL');
+                  }}
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-700 cursor-pointer"
+                >
+                  <option value="ALL">All Tehsils ({records.length})</option>
+                  {tehsilStats.map(([tehsilName, count]) => (
+                    <option key={tehsilName} value={tehsilName}>
+                      {tehsilName} ({count})
+                    </option>
+                  ))}
+                </select>
+
+                {/* Union Council Dropdown */}
+                <select
+                  aria-label="Filter by Union Council"
+                  value={selectedUc}
+                  onChange={(e) => setSelectedUc(e.target.value)}
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-700 max-w-[230px] cursor-pointer"
+                >
+                  <option value="ALL">
+                    All Union Councils ({ucStats.length})
+                  </option>
+                  {ucStats.map((uc) => (
+                    <option key={uc.ucRaw} value={uc.ucRaw}>
+                      {uc.ucRaw} ({uc.recordCount})
+                    </option>
+                  ))}
+                </select>
+
                 {/* Date Selector */}
                 <select
                   aria-label="Filter by Survey Date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-700 cursor-pointer"
                 >
-                  <option value="ALL">All Survey Dates (6 Days)</option>
+                  <option value="ALL">All Survey Dates ({dateStats.length} Days)</option>
                   {dateStats.map(([dateLabel, cnt]) => (
                     <option key={dateLabel} value={dateLabel}>
                       {dateLabel} ({cnt} entries)
@@ -891,7 +900,7 @@ export default function App() {
                   onChange={(e) =>
                     setPhotoCountFilter(e.target.value as PhotoCountFilter)
                   }
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-700 cursor-pointer"
                 >
                   <option value="all">Any Photo Count</option>
                   <option value="single">Single GPS Photo (1)</option>
@@ -903,7 +912,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={resetAllFilters}
-                    className="px-2.5 py-1.5 text-teal-700 hover:bg-teal-50 rounded-md font-medium transition-colors inline-flex items-center gap-1 whitespace-nowrap shrink-0"
+                    className="px-2.5 py-1.5 text-teal-700 hover:bg-teal-50 rounded-md font-medium transition-colors inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <RotateCcw className="w-3 h-3" />
                     Reset Filters
@@ -921,7 +930,7 @@ export default function App() {
                   aria-label="Sort survey entries"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortOption)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-700 cursor-pointer"
                 >
                   <option value="newest">Timestamp: Newest First</option>
                   <option value="oldest">Timestamp: Oldest First</option>
