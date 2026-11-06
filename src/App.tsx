@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   X,
@@ -14,9 +14,12 @@ import {
   SlidersHorizontal,
   ArrowUpDown,
   Eye,
+  Link2,
+  Check,
 } from 'lucide-react';
 import {
   ATTACHED_CSV_ASSET_PATH,
+  DEFAULT_GOOGLE_SHEET_URL,
   fetchAttachedSurveyCsv,
   GpsPhoto,
   INITIAL_SURVEY_RECORDS,
@@ -33,8 +36,35 @@ type SortOption = 'newest' | 'oldest' | 'photos-desc' | 'uc-asc' | 'chak-asc';
 type PhotoCountFilter = 'all' | 'single' | 'medium' | 'bulk';
 
 export default function App() {
-  const [records, setRecords] = useState<SurveyRecord[]>(INITIAL_SURVEY_RECORDS);
+  const [sheetRecords, setSheetRecords] = useState<SurveyRecord[]>(
+    INITIAL_SURVEY_RECORDS
+  );
+  const [customRecords, setCustomRecords] = useState<SurveyRecord[]>([]);
   const [isSyncingAsset, setIsSyncingAsset] = useState<boolean>(false);
+
+  // Live 10-second Google Sheet sync state
+  const [googleSheetUrl, setGoogleSheetUrl] = useState<string>(
+    DEFAULT_GOOGLE_SHEET_URL
+  );
+  const [sheetUrlDraft, setSheetUrlDraft] = useState<string>(
+    DEFAULT_GOOGLE_SHEET_URL
+  );
+  const [isEditingSheetUrl, setIsEditingSheetUrl] = useState<boolean>(false);
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(true);
+  const [secondsUntilSync, setSecondsUntilSync] = useState<number>(10);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string>(() =>
+    new Date().toLocaleTimeString([], { hour12: false })
+  );
+  const [syncSourceLabel, setSyncSourceLabel] = useState<string>(
+    'Areas 31.10.2026 (Responses)'
+  );
+  const [syncError, setSyncError] = useState<string | undefined>(undefined);
+  const isSyncingRef = useRef<boolean>(false);
+
+  const records = useMemo(
+    () => [...customRecords, ...sheetRecords],
+    [customRecords, sheetRecords]
+  );
 
   // Navigation & View modes
   const [activeSection, setActiveSection] = useState<ActiveSection>('directory');
@@ -54,24 +84,62 @@ export default function App() {
   const [detailRecord, setDetailRecord] = useState<SurveyRecord | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
 
-  // Load directly from the attached workspace CSV asset on mount
-  useEffect(() => {
-    let mounted = true;
-    fetchAttachedSurveyCsv().then((loaded) => {
-      if (mounted && loaded.length > 0) {
-        setRecords(loaded);
-      }
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const performSheetSync = useCallback(
+    async (overrideUrl?: string) => {
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
+      setIsSyncingAsset(true);
 
-  const handleResyncAttachedSheet = async () => {
-    setIsSyncingAsset(true);
-    const loaded = await fetchAttachedSurveyCsv();
-    setRecords(loaded);
-    setIsSyncingAsset(false);
+      const targetUrl =
+        overrideUrl !== undefined ? overrideUrl : googleSheetUrl;
+      const result = await fetchAttachedSurveyCsv(targetUrl);
+
+      if (result.records.length > 0) {
+        setSheetRecords(result.records);
+      }
+      setSyncSourceLabel(result.sourceLabel);
+      setSyncError(result.error);
+      setLastSyncedAt(new Date().toLocaleTimeString([], { hour12: false }));
+      setSecondsUntilSync(10);
+      setIsSyncingAsset(false);
+      isSyncingRef.current = false;
+    },
+    [googleSheetUrl]
+  );
+
+  // Initial sync on mount
+  useEffect(() => {
+    performSheetSync();
+  }, [performSheetSync]);
+
+  // Automatic 10-second polling interval
+  useEffect(() => {
+    if (!isAutoSyncEnabled) return;
+
+    const timer = window.setInterval(() => {
+      setSecondsUntilSync((prev) => {
+        if (prev <= 1) {
+          performSheetSync();
+          return 10;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isAutoSyncEnabled, performSheetSync]);
+
+  const handleSaveSheetUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = sheetUrlDraft.trim();
+    setGoogleSheetUrl(cleaned);
+    if (cleaned) {
+      localStorage.setItem('jhang_survey_google_sheet_url', cleaned);
+    } else {
+      localStorage.removeItem('jhang_survey_google_sheet_url');
+    }
+    setIsEditingSheetUrl(false);
+    performSheetSync(cleaned);
   };
 
   // Distinct Tehsils with counts
@@ -374,28 +442,106 @@ export default function App() {
             </button>
           </div>
 
-          {/* Dataset Source Info */}
-          <div className="pb-5 border-b border-slate-200">
-            <div className="flex items-center justify-between mb-1.5">
+          {/* Dataset Source & 10-Second Auto-Sync Controls */}
+          <div className="pb-5 border-b border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-900">
                 Connected Google Sheet
               </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingSheetUrl((v) => !v)}
+                  className="text-xs text-slate-600 hover:text-teal-700 inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Link2 className="w-3 h-3" />
+                  {googleSheetUrl ? 'Change URL' : 'Link Sheet'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => performSheetSync()}
+                  title="Sync now from Google Sheet"
+                  className="text-xs text-teal-700 hover:underline inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <RotateCcw
+                    className={`w-3 h-3 ${isSyncingAsset ? 'animate-spin' : ''}`}
+                  />
+                  Sync
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 font-mono break-all">
+              {syncSourceLabel}
+            </p>
+
+            {/* Live 10-Second Auto-Sync Status Line */}
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono tabular-nums pt-0.5">
+              <span>
+                {isAutoSyncEnabled
+                  ? `Auto-sync in ${secondsUntilSync}s`
+                  : 'Auto-sync paused'}
+              </span>
               <button
                 type="button"
-                onClick={handleResyncAttachedSheet}
-                title="Reload attached Areas 31.10.2026 (Responses) dataset"
-                className="text-xs text-teal-700 hover:underline inline-flex items-center gap-1 whitespace-nowrap shrink-0"
+                onClick={() => setIsAutoSyncEnabled((prev) => !prev)}
+                className="text-teal-700 hover:underline font-sans font-medium cursor-pointer"
               >
-                <RotateCcw
-                  className={`w-3 h-3 ${isSyncingAsset ? 'animate-spin' : ''}`}
-                />
-                Sync
+                {isAutoSyncEnabled ? 'Pause' : 'Resume 10s'}
               </button>
             </div>
-            <p className="text-xs text-slate-600 font-mono break-all">
-              Areas 31.10.2026 (Responses)
-            </p>
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 font-mono tabular-nums">
+
+            <div className="text-[11px] text-slate-500 font-mono tabular-nums">
+              Last synced: {lastSyncedAt}
+            </div>
+
+            {syncError && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                {syncError}
+              </p>
+            )}
+
+            {isEditingSheetUrl && (
+              <form
+                onSubmit={handleSaveSheetUrl}
+                className="pt-2 space-y-2 border-t border-slate-100"
+              >
+                <label className="block text-[11px] font-medium text-slate-700">
+                  Live Google Sheet URL or ID (Shared as &ldquo;Anyone with link&rdquo;)
+                </label>
+                <input
+                  type="text"
+                  value={sheetUrlDraft}
+                  onChange={(e) => setSheetUrlDraft(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  className="w-full px-2.5 py-1.5 text-xs font-mono bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700"
+                />
+                <div className="flex items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSheetUrlDraft('');
+                      setGoogleSheetUrl('');
+                      localStorage.removeItem('jhang_survey_google_sheet_url');
+                      setIsEditingSheetUrl(false);
+                      performSheetSync('');
+                    }}
+                    className="px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 rounded"
+                  >
+                    Use Default
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-2.5 py-1 text-[11px] font-medium text-white bg-teal-700 hover:bg-teal-800 rounded inline-flex items-center gap-1"
+                  >
+                    <Check className="w-3 h-3" />
+                    Connect 10s Sync
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="pt-1 flex items-center gap-2 text-xs text-slate-500 font-mono tabular-nums">
               <span>{records.length} Rows</span>
               <span aria-hidden="true">·</span>
               <span>{totalPhotosCount} GPS Links</span>
@@ -1104,8 +1250,11 @@ export default function App() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         nextRowNumber={records.length + 1}
-        onAddRecord={(newRec) => setRecords((prev) => [newRec, ...prev])}
-        onImportCsvRecords={(imported) => setRecords(imported)}
+        onAddRecord={(newRec) => setCustomRecords((prev) => [newRec, ...prev])}
+        onImportCsvRecords={(imported) => {
+          setCustomRecords([]);
+          setSheetRecords(imported);
+        }}
       />
     </div>
   );

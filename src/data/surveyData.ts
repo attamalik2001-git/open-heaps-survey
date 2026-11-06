@@ -270,16 +270,131 @@ export function parseSurveyCsv(csvText: string): SurveyRecord[] {
 
 export const INITIAL_SURVEY_RECORDS: SurveyRecord[] = parseSurveyCsv(RAW_SURVEY_CSV);
 
-export async function fetchAttachedSurveyCsv(): Promise<SurveyRecord[]> {
+export const DEFAULT_GOOGLE_SHEET_URL =
+  typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('sheet') ||
+      localStorage.getItem('jhang_survey_google_sheet_url') ||
+      ''
+    : '';
+
+/**
+ * Converts any Google Sheets URL (edit link, share link, pubhtml link, or Sheet ID)
+ * into a direct CORS-compatible CSV export URL.
+ */
+export function resolveGoogleSheetCsvUrl(input: string): {
+  primaryUrl: string;
+  fallbackUrl: string;
+  displayLabel: string;
+} {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    const bust = `t=${Date.now()}`;
+    const sep = ATTACHED_CSV_ASSET_PATH.includes('?') ? '&' : '?';
+    const localUrl = `${ATTACHED_CSV_ASSET_PATH}${sep}${bust}`;
+    return {
+      primaryUrl: localUrl,
+      fallbackUrl: localUrl,
+      displayLabel: 'Areas 31.10.2026 (Responses)',
+    };
+  }
+
+  // Case 1: "Published to the web" link (/spreadsheets/d/e/2PACX-...)
+  const pubMatch = trimmed.match(
+    /\/spreadsheets\/d\/e\/([a-zA-Z0-9-_]+)/
+  );
+  if (pubMatch && pubMatch[1]) {
+    const pubId = pubMatch[1];
+    const gidMatch = trimmed.match(/[?&]gid=(\d+)/);
+    const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : '';
+    const pubCsvUrl = `https://docs.google.com/spreadsheets/d/e/${pubId}/pub?output=csv${gidParam}&t=${Date.now()}`;
+    return {
+      primaryUrl: pubCsvUrl,
+      fallbackUrl: pubCsvUrl,
+      displayLabel: `Google Sheet (Published ${pubId.slice(0, 10)}…)`,
+    };
+  }
+
+  // Case 2: Standard Google Sheet link (/spreadsheets/d/{SHEET_ID}/...)
+  const sheetMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (sheetMatch && sheetMatch[1]) {
+    const sheetId = sheetMatch[1];
+    const gidMatch = trimmed.match(/[#?&]gid=(\d+)/);
+    const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : '';
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv${gidParam}&t=${Date.now()}`;
+    const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}&t=${Date.now()}`;
+    return {
+      primaryUrl: gvizUrl,
+      fallbackUrl: exportUrl,
+      displayLabel: `Google Sheet (${sheetId.slice(0, 10)}…)`,
+    };
+  }
+
+  // Case 3: Raw Google Sheet ID (alphanumeric/hyphen/underscore, 25+ chars)
+  if (/^[a-zA-Z0-9-_]{25,}$/.test(trimmed)) {
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${trimmed}/gviz/tq?tqx=out:csv&t=${Date.now()}`;
+    const exportUrl = `https://docs.google.com/spreadsheets/d/${trimmed}/export?format=csv&t=${Date.now()}`;
+    return {
+      primaryUrl: gvizUrl,
+      fallbackUrl: exportUrl,
+      displayLabel: `Google Sheet (${trimmed.slice(0, 10)}…)`,
+    };
+  }
+
+  // Case 4: Custom CSV endpoint URL
+  const sep = trimmed.includes('?') ? '&' : '?';
+  const customUrl = `${trimmed}${sep}t=${Date.now()}`;
+  return {
+    primaryUrl: customUrl,
+    fallbackUrl: customUrl,
+    displayLabel: 'Live CSV Endpoint',
+  };
+}
+
+export async function fetchAttachedSurveyCsv(
+  customSheetUrl?: string
+): Promise<{
+  records: SurveyRecord[];
+  sourceLabel: string;
+  error?: string;
+}> {
+  const activeUrl =
+    customSheetUrl !== undefined ? customSheetUrl : DEFAULT_GOOGLE_SHEET_URL;
+  const { primaryUrl, fallbackUrl, displayLabel } =
+    resolveGoogleSheetCsvUrl(activeUrl);
+
   try {
-    const response = await fetch(ATTACHED_CSV_ASSET_PATH);
+    let response = await fetch(primaryUrl, { cache: 'no-store' });
+    if (!response.ok && fallbackUrl !== primaryUrl) {
+      response = await fetch(fallbackUrl, { cache: 'no-store' });
+    }
     if (!response.ok) {
-      return INITIAL_SURVEY_RECORDS;
+      return {
+        records: INITIAL_SURVEY_RECORDS,
+        sourceLabel: displayLabel,
+        error: `HTTP ${response.status} when syncing sheet. Ensure the Google Sheet is shared as "Anyone with the link can view".`,
+      };
     }
     const text = await response.text();
     const parsed = parseSurveyCsv(text);
-    return parsed.length > 0 ? parsed : INITIAL_SURVEY_RECORDS;
+    if (parsed.length === 0) {
+      return {
+        records: INITIAL_SURVEY_RECORDS,
+        sourceLabel: displayLabel,
+        error:
+          'Sheet response did not contain valid CSV rows. Ensure the sheet is public ("Anyone with the link can view").',
+      };
+    }
+    return {
+      records: parsed,
+      sourceLabel: displayLabel,
+    };
   } catch {
-    return INITIAL_SURVEY_RECORDS;
+    return {
+      records: INITIAL_SURVEY_RECORDS,
+      sourceLabel: displayLabel,
+      error: activeUrl
+        ? 'Could not reach Google Sheet. Verify that link sharing is set to "Anyone with the link can view".'
+        : undefined,
+    };
   }
 }
