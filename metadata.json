@@ -1,0 +1,6 @@
+{
+  "name": "Jhang District GPS Field Survey Portal",
+  "description": "Searchable project dashboard and GPS photo gallery for Jhang, 18-Hazari, and Ahmad Pur Sial Tehsil Union Council and Chak/Mouza field survey responses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
