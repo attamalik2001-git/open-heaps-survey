@@ -670,12 +670,20 @@ export default function App() {
         <main className="flex-1 min-w-0 p-5 md:p-8 space-y-6">
           {/* Header & KPI Metrics Strip */}
           <section className="bg-white border border-slate-200 rounded-xl p-6">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-slate-200">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-5 border-b border-slate-200">
               <div>
-                <div className="flex items-center gap-2 text-xs text-slate-500 font-mono tabular-nums">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-mono tabular-nums">
                   <span>District Jhang Field Operations</span>
                   <span aria-hidden="true">·</span>
-                  <span>Oct 31, 2026 – Nov 06, 2026</span>
+                  <span>Live Google Sheet Auto-Sync (Every 10s)</span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {isAutoSyncEnabled
+                      ? `Next sync in ${secondsUntilSync}s`
+                      : 'Auto-sync paused'}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span>Last synced: {lastSyncedAt}</span>
                 </div>
                 <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight mt-1 font-display">
                   Mouza &amp; Union Council GPS Survey Dashboard
@@ -685,21 +693,32 @@ export default function App() {
               <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsEditingSheetUrl((prev) => !prev)}
+                  onClick={() => performSheetSync()}
                   className="px-3.5 py-2 text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  <Link2 className="w-3.5 h-3.5" />
-                  {googleSheetUrl
-                    ? `Live Sheet Connected (${secondsUntilSync}s)`
-                    : 'Connect Live Google Sheet (10s Sync)'}
+                  <RotateCcw
+                    className={`w-3.5 h-3.5 ${isSyncingAsset ? 'animate-spin' : ''}`}
+                  />
+                  {isSyncingAsset
+                    ? 'Syncing Sheet…'
+                    : `Sync Sheet Now (${secondsUntilSync}s)`}
                 </button>
+                <a
+                  href={googleSheetUrl || DEFAULT_GOOGLE_SHEET_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open Google Sheet
+                </a>
                 <button
                   type="button"
                   onClick={handleExportCsv}
                   className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Download Filtered CSV ({filteredRecords.length})
+                  Download CSV ({filteredRecords.length})
                 </button>
               </div>
             </div>

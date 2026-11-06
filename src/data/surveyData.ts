@@ -289,6 +289,8 @@ export function resolveGoogleSheetCsvUrl(input: string): {
   primaryUrl: string;
   fallbackUrl: string;
   displayLabel: string;
+  sheetId?: string;
+  gid?: string;
 } {
   const trimmed = input.trim();
   if (!trimmed) {
@@ -323,13 +325,16 @@ export function resolveGoogleSheetCsvUrl(input: string): {
   if (sheetMatch && sheetMatch[1]) {
     const sheetId = sheetMatch[1];
     const gidMatch = trimmed.match(/[#?&]gid=(\d+)/);
-    const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : '';
+    const gid = gidMatch ? gidMatch[1] : undefined;
+    const gidParam = gid ? `&gid=${gid}` : '';
     const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv${gidParam}&t=${Date.now()}`;
     const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}&t=${Date.now()}`;
     return {
       primaryUrl: gvizUrl,
       fallbackUrl: exportUrl,
-      displayLabel: `Google Sheet (${sheetId.slice(0, 10)}…)`,
+      displayLabel: `Live Google Sheet (${sheetId.slice(0, 10)}…)`,
+      sheetId,
+      gid,
     };
   }
 
@@ -340,7 +345,8 @@ export function resolveGoogleSheetCsvUrl(input: string): {
     return {
       primaryUrl: gvizUrl,
       fallbackUrl: exportUrl,
-      displayLabel: `Google Sheet (${trimmed.slice(0, 10)}…)`,
+      displayLabel: `Live Google Sheet (${trimmed.slice(0, 10)}…)`,
+      sheetId: trimmed,
     };
   }
 
@@ -354,6 +360,108 @@ export function resolveGoogleSheetCsvUrl(input: string): {
   };
 }
 
+interface GvizCell {
+  v?: string | number | null;
+  f?: string | null;
+}
+
+interface GvizResponse {
+  status?: string;
+  table?: {
+    cols?: Array<{ label?: string }>;
+    rows?: Array<{ c?: Array<GvizCell | null> }>;
+  };
+}
+
+function escapeCsvCell(val: string): string {
+  if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+    return `"${val.replace(/"/g, '""')}"`;
+  }
+  return val;
+}
+
+/**
+ * Fetches live Google Sheet rows using JSONP (<script> tag) so browser CORS
+ * or logged-in Google cookie redirects never block 10-second polling on GitHub Pages.
+ */
+function fetchSheetViaJsonp(
+  sheetId: string,
+  gid?: string
+): Promise<SurveyRecord[]> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      reject(new Error('No DOM available'));
+      return;
+    }
+
+    const cbName = `__gvizCallback_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    const script = document.createElement('script');
+    const win = window as unknown as Record<string, unknown>;
+
+    const cleanup = () => {
+      delete win[cbName];
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP request timed out'));
+    }, 8000);
+
+    win[cbName] = (data: GvizResponse) => {
+      window.clearTimeout(timeoutId);
+      cleanup();
+      try {
+        if (!data || data.status !== 'ok' || !data.table?.rows) {
+          reject(new Error('Invalid gviz response'));
+          return;
+        }
+        const headerLine =
+          'Timestamp,Tehsil,Union Council,Name of Chak/Mouza,Attach GPS Pictures';
+        const csvLines = [headerLine];
+
+        for (const row of data.table.rows) {
+          const cells = row.c || [];
+          const colValues = [0, 1, 2, 3, 4].map((idx) => {
+            const cell = cells[idx];
+            if (!cell) return '';
+            const raw =
+              cell.f !== undefined && cell.f !== null
+                ? String(cell.f)
+                : cell.v !== undefined && cell.v !== null
+                ? String(cell.v)
+                : '';
+            return escapeCsvCell(raw);
+          });
+          if (colValues.some((v) => v.trim().length > 0)) {
+            csvLines.push(colValues.join(','));
+          }
+        }
+
+        const parsed = parseSurveyCsv(csvLines.join('\n'));
+        resolve(parsed);
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    script.onerror = () => {
+      window.clearTimeout(timeoutId);
+      cleanup();
+      reject(new Error('JSONP script load error'));
+    };
+
+    const gidParam = gid ? `&gid=${gid}` : '';
+    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=responseHandler:${cbName}${gidParam}&_=${Date.now()}`;
+    script.async = true;
+    document.head.appendChild(script);
+  });
+}
+
 export async function fetchAttachedSurveyCsv(
   customSheetUrl?: string
 ): Promise<{
@@ -363,13 +471,35 @@ export async function fetchAttachedSurveyCsv(
 }> {
   const activeUrl =
     customSheetUrl !== undefined ? customSheetUrl : DEFAULT_GOOGLE_SHEET_URL;
-  const { primaryUrl, fallbackUrl, displayLabel } =
+  const { primaryUrl, fallbackUrl, displayLabel, sheetId, gid } =
     resolveGoogleSheetCsvUrl(activeUrl);
 
+  // 1. Try CORS-proof JSONP first whenever a Google Sheet ID is available
+  if (sheetId) {
+    try {
+      const jsonpRecords = await fetchSheetViaJsonp(sheetId, gid);
+      if (jsonpRecords.length > 0) {
+        return {
+          records: jsonpRecords,
+          sourceLabel: displayLabel,
+        };
+      }
+    } catch {
+      // Fall through to credential-less fetch
+    }
+  }
+
+  // 2. Fallback to credential-less fetch
   try {
-    let response = await fetch(primaryUrl, { cache: 'no-store' });
+    let response = await fetch(primaryUrl, {
+      cache: 'no-store',
+      credentials: 'omit',
+    });
     if (!response.ok && fallbackUrl !== primaryUrl) {
-      response = await fetch(fallbackUrl, { cache: 'no-store' });
+      response = await fetch(fallbackUrl, {
+        cache: 'no-store',
+        credentials: 'omit',
+      });
     }
     if (!response.ok) {
       return {
