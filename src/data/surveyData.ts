@@ -34,7 +34,7 @@ export interface SurveyRecord {
   photoCount: number;
 }
 
-export const ATTACHED_CSV_ASSET_PATH = '/assets/aistudio/Areas_31.10_59fe9b4d.2026__Responses_';
+export const ATTACHED_CSV_ASSET_PATH = `${import.meta.env.BASE_URL}assets/aistudio/Areas_31.10_59fe9b4d.2026__Responses_`;
 
 export const RAW_SURVEY_CSV = `Timestamp,Tehsil,Union Council,Name of Chak/Mouza,Attach GPS Pictures
 10/31/2026 13:54:32,18-Hazari,83. UCH GUL IMAM,Burzi Wala Chak NO.11/3 UC Uchgulimam ,https://drive.google.com/open?id=1SRqGyHWk4GB5sqkjm4FWCxdmY-Cntk-K
