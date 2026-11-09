@@ -16,9 +16,12 @@ import {
   Eye,
   Link2,
   Check,
+  FileText,
+  Presentation,
+  FileSpreadsheet,
+  Loader2,
 } from 'lucide-react';
 import {
-  ATTACHED_CSV_ASSET_PATH,
   DEFAULT_GOOGLE_SHEET_URL,
   fetchAttachedSurveyCsv,
   GpsPhoto,
@@ -29,8 +32,20 @@ import { DrivePhotoThumb } from './components/DrivePhotoThumb';
 import { PhotoLightboxModal } from './components/PhotoLightboxModal';
 import { RecordDetailModal } from './components/RecordDetailModal';
 import { AddEntryModal } from './components/AddEntryModal';
+import {
+  ChakMouzaFullReportView,
+  ExportReportModal,
+} from './components/ExportReportModal';
+import {
+  ExportFormat,
+  ExportProgress,
+  exportReportAsExcel,
+  exportReportAsPdf,
+  exportReportAsPptx,
+  GroupingMode,
+} from './utils/reportExporter';
 
-type ActiveSection = 'directory' | 'gallery' | 'ucs';
+type ActiveSection = 'directory' | 'gallery' | 'ucs' | 'chak-report';
 type DirectoryLayout = 'cards' | 'table';
 type SortOption = 'newest' | 'oldest' | 'photos-desc' | 'uc-asc' | 'chak-asc';
 type PhotoCountFilter = 'all' | 'single' | 'medium' | 'bulk';
@@ -78,11 +93,18 @@ export default function App() {
   const [photoCountFilter, setPhotoCountFilter] = useState<PhotoCountFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
 
-  // Modals
+  // Modals & Export State
   const [lightboxPhoto, setLightboxPhoto] = useState<GpsPhoto | null>(null);
   const [lightboxList, setLightboxList] = useState<GpsPhoto[]>([]);
   const [detailRecord, setDetailRecord] = useState<SurveyRecord | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [reportGroupingMode, setReportGroupingMode] =
+    useState<GroupingMode>('consolidated-chak');
+  const [quickExportFormat, setQuickExportFormat] =
+    useState<ExportFormat | null>(null);
+  const [quickExportProgress, setQuickExportProgress] =
+    useState<ExportProgress | null>(null);
 
   const performSheetSync = useCallback(
     async (overrideUrl?: string) => {
@@ -328,10 +350,58 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleQuickExportWholeReport = async (
+    format: ExportFormat,
+    useFiltered = false
+  ) => {
+    if (quickExportFormat) return;
+    const target = useFiltered ? filteredRecords : records;
+    setQuickExportFormat(format);
+    setQuickExportProgress(null);
+    try {
+      if (format === 'pdf') {
+        await exportReportAsPdf(
+          target,
+          reportGroupingMode,
+          setQuickExportProgress
+        );
+      } else if (format === 'pptx') {
+        await exportReportAsPptx(
+          target,
+          reportGroupingMode,
+          setQuickExportProgress
+        );
+      } else if (format === 'xlsx') {
+        await exportReportAsExcel(
+          target,
+          reportGroupingMode,
+          setQuickExportProgress
+        );
+      }
+    } catch (err) {
+      console.error('Quick export failed:', err);
+    } finally {
+      setQuickExportFormat(null);
+      setQuickExportProgress(null);
+    }
+  };
+
+  const handleTriggerBrowserPrint = (
+    _recordsToPrint: SurveyRecord[],
+    mode: GroupingMode
+  ) => {
+    setReportGroupingMode(mode);
+    setIsExportModalOpen(false);
+    setActiveSection('chak-report');
+    window.setTimeout(() => {
+      window.print();
+    }, 350);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       {/* Top Bar Contract: 3 zones separated by gap-8 */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between gap-8">
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between gap-8 print:hidden">
         {/* Zone 1: Single text element wordmark */}
         <a
           href="#top"
@@ -344,12 +414,12 @@ export default function App() {
           Jhang Field Survey Portal
         </a>
 
-        {/* Zone 2: 4 concise single-line text navigation links */}
+        {/* Zone 2: Concise single-line text navigation links */}
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
           <button
             type="button"
             onClick={() => setActiveSection('directory')}
-            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 ${
+            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 cursor-pointer ${
               activeSection === 'directory'
                 ? 'border-teal-700 text-slate-900 font-semibold'
                 : 'border-transparent'
@@ -359,8 +429,19 @@ export default function App() {
           </button>
           <button
             type="button"
+            onClick={() => setActiveSection('chak-report')}
+            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 cursor-pointer ${
+              activeSection === 'chak-report'
+                ? 'border-teal-700 text-slate-900 font-semibold'
+                : 'border-transparent'
+            }`}
+          >
+            Chak/Mouza Wise Report
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveSection('gallery')}
-            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 ${
+            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 cursor-pointer ${
               activeSection === 'gallery'
                 ? 'border-teal-700 text-slate-900 font-semibold'
                 : 'border-transparent'
@@ -371,7 +452,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setActiveSection('ucs')}
-            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 ${
+            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 cursor-pointer ${
               activeSection === 'ucs'
                 ? 'border-teal-700 text-slate-900 font-semibold'
                 : 'border-transparent'
@@ -381,15 +462,23 @@ export default function App() {
           </button>
           <button
             type="button"
-            onClick={handleExportCsv}
-            className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 border-transparent"
+            onClick={() => setIsExportModalOpen(true)}
+            className="text-teal-700 hover:text-teal-900 font-semibold transition-colors whitespace-nowrap shrink-0 pb-0.5 border-b-2 border-transparent cursor-pointer"
           >
-            Export CSV
+            Export Report (PDF · PPTX · Excel)
           </button>
         </nav>
 
-        {/* Zone 3: 1 primary action */}
-        <div className="flex items-center shrink-0">
+        {/* Zone 3: Primary actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-3.5 py-2 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export Report
+          </button>
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
@@ -403,10 +492,10 @@ export default function App() {
 
       {/* Main Workspace Container (1440px max-w or full-width sidebar layout) */}
       <div className="flex-1 w-full max-w-[1440px] mx-auto flex flex-col lg:flex-row">
-        {/* Left Sidebar Navigation & Facet Filters (270px on desktop) */}
-        <aside className="w-full lg:w-[272px] shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-5 flex flex-col gap-6">
+        {/* Left Sidebar Navigation & Facet Filters (272px on desktop) */}
+        <aside className="w-full lg:w-[272px] shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-5 flex flex-col gap-6 print:hidden">
           {/* Mobile Section Switcher */}
-          <div className="flex md:hidden items-center gap-1 p-1 bg-slate-100 rounded-lg">
+          <div className="flex md:hidden items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto">
             <button
               type="button"
               onClick={() => setActiveSection('directory')}
@@ -417,6 +506,17 @@ export default function App() {
               }`}
             >
               Directory
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSection('chak-report')}
+              className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                activeSection === 'chak-report'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600'
+              }`}
+            >
+              Chak Report
             </button>
             <button
               type="button"
@@ -438,7 +538,7 @@ export default function App() {
                   : 'text-slate-600'
               }`}
             >
-              Union Councils
+              UCs
             </button>
           </div>
 
@@ -638,13 +738,88 @@ export default function App() {
               </p>
             )}
           </div>
+
+          {/* Sidebar Export Whole Report (Chak/Mouza Wise) Box */}
+          <div className="pt-5 border-t border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-900">
+                Export Whole Report
+              </span>
+              <span className="text-[10px] font-mono text-teal-700 font-semibold">
+                Chak/Mouza Wise
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Export all Tehsils, Union Council Names, and Chaks/Mouzas with all attached GPS pictures:
+            </p>
+            <div className="grid grid-cols-1 gap-1.5">
+              <button
+                type="button"
+                disabled={quickExportFormat !== null}
+                onClick={() => handleQuickExportWholeReport('pdf', false)}
+                className="w-full px-3 py-2 text-xs font-semibold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors inline-flex items-center justify-between cursor-pointer disabled:opacity-50"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  {quickExportFormat === 'pdf' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5" />
+                  )}
+                  Export as PDF (.pdf)
+                </span>
+                <span className="font-mono text-[10px]">{totalPhotosCount} pics</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={quickExportFormat !== null}
+                onClick={() => handleQuickExportWholeReport('pptx', false)}
+                className="w-full px-3 py-2 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors inline-flex items-center justify-between cursor-pointer disabled:opacity-50"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  {quickExportFormat === 'pptx' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Presentation className="w-3.5 h-3.5" />
+                  )}
+                  Export PowerPoint (.pptx)
+                </span>
+                <span className="font-mono text-[10px]">Slides</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={quickExportFormat !== null}
+                onClick={() => handleQuickExportWholeReport('xlsx', false)}
+                className="w-full px-3 py-2 text-xs font-semibold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors inline-flex items-center justify-between cursor-pointer disabled:opacity-50"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  {quickExportFormat === 'xlsx' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                  )}
+                  Export MS Excel (.xlsx)
+                </span>
+                <span className="font-mono text-[10px]">Workbook</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(true)}
+                className="w-full px-3 py-1.5 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-center cursor-pointer mt-0.5"
+              >
+                More Export Options &amp; Preview →
+              </button>
+            </div>
+          </div>
         </aside>
 
         {/* Main Content Viewport */}
         <main className="flex-1 min-w-0 p-5 md:p-8 space-y-6">
           {/* Header & KPI Metrics Strip */}
-          <section className="bg-white border border-slate-200 rounded-xl p-6">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-5 border-b border-slate-200">
+          <section className="bg-white border border-slate-200 rounded-xl p-6 print:hidden">
+            <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4 pb-5 border-b border-slate-200">
               <div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-mono tabular-nums">
                   <span>District Jhang Field Operations</span>
@@ -667,35 +842,78 @@ export default function App() {
               <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <button
                   type="button"
+                  disabled={quickExportFormat !== null}
+                  onClick={() => handleQuickExportWholeReport('pdf', false)}
+                  title="Download Whole Report with Tehsil, Union Council, Chak/Mouza & All Pictures as PDF"
+                  className="px-3 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  {quickExportFormat === 'pdf' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5" />
+                  )}
+                  Export PDF
+                </button>
+                <button
+                  type="button"
+                  disabled={quickExportFormat !== null}
+                  onClick={() => handleQuickExportWholeReport('pptx', false)}
+                  title="Download Whole Report with Tehsil, Union Council, Chak/Mouza & All Pictures as PowerPoint (.pptx)"
+                  className="px-3 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  {quickExportFormat === 'pptx' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Presentation className="w-3.5 h-3.5" />
+                  )}
+                  Export PowerPoint
+                </button>
+                <button
+                  type="button"
+                  disabled={quickExportFormat !== null}
+                  onClick={() => handleQuickExportWholeReport('xlsx', false)}
+                  title="Download Whole Report with Tehsil, Union Council, Chak/Mouza & All Pictures as MS Excel (.xlsx)"
+                  className="px-3 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  {quickExportFormat === 'xlsx' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                  )}
+                  Export MS Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsExportModalOpen(true)}
+                  className="px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Report Options
+                </button>
+                <button
+                  type="button"
                   onClick={() => performSheetSync()}
-                  className="px-3.5 py-2 text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-3 py-2 text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <RotateCcw
                     className={`w-3.5 h-3.5 ${isSyncingAsset ? 'animate-spin' : ''}`}
                   />
-                  {isSyncingAsset
-                    ? 'Syncing Sheet…'
-                    : `Sync Sheet Now (${secondsUntilSync}s)`}
-                </button>
-                <a
-                  href={googleSheetUrl || DEFAULT_GOOGLE_SHEET_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Open Google Sheet
-                </a>
-                <button
-                  type="button"
-                  onClick={handleExportCsv}
-                  className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download CSV ({filteredRecords.length})
+                  {isSyncingAsset ? 'Syncing…' : `Sync (${secondsUntilSync}s)`}
                 </button>
               </div>
             </div>
+
+            {quickExportFormat && quickExportProgress && (
+              <div className="mt-4 bg-slate-900 text-white rounded-lg px-4 py-2.5 flex items-center justify-between gap-4 text-xs">
+                <span className="inline-flex items-center gap-2 font-medium">
+                  <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+                  {quickExportProgress.message}
+                </span>
+                <span className="font-mono text-teal-300">
+                  {quickExportProgress.completed} / {quickExportProgress.total}
+                </span>
+              </div>
+            )}
 
             {/* 4-Column Tabular KPI Strip */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 pt-5">
@@ -750,7 +968,7 @@ export default function App() {
           </section>
 
           {/* Search & Interactive Filter Bar */}
-          <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+          <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-4 print:hidden">
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
               {/* Search Box */}
               <div className="relative flex-1">
@@ -775,7 +993,7 @@ export default function App() {
               </div>
 
               {/* View Mode & Section Switcher */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
                 <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
                   <button
                     type="button"
@@ -806,6 +1024,18 @@ export default function App() {
                   >
                     <TableIcon className="w-3.5 h-3.5" />
                     Sheet Table
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection('chak-report')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                      activeSection === 'chak-report'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Chak/Mouza Report
                   </button>
                   <button
                     type="button"
@@ -1173,7 +1403,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredPhotos.map((photo) => (
                   <DrivePhotoThumb
                     key={photo.id}
@@ -1185,6 +1415,17 @@ export default function App() {
                 ))}
               </div>
             </section>
+          ) : activeSection === 'chak-report' ? (
+            /* VIEW 4: COMPLETE CHAK / MOUZA WISE REPORT WITH ALL PICTURES */
+            <ChakMouzaFullReportView
+              records={filteredRecords}
+              groupingMode={reportGroupingMode}
+              onGroupingModeChange={setReportGroupingMode}
+              onOpenExportModal={() => setIsExportModalOpen(true)}
+              onQuickExport={(fmt) => handleQuickExportWholeReport(fmt, true)}
+              activeQuickFormat={quickExportFormat}
+              quickProgress={quickExportProgress}
+            />
           ) : (
             /* VIEW 3: UNION COUNCILS & TEHSIL COVERAGE MATRIX */
             <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -1257,7 +1498,7 @@ export default function App() {
       </div>
 
       {/* Quiet Footer */}
-      <footer className="bg-white border-t border-slate-200 px-6 py-4 mt-auto">
+      <footer className="bg-white border-t border-slate-200 px-6 py-4 mt-auto print:hidden">
         <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <span>
             Jhang District GPS Field Survey Portal · Source: Areas 31.10.2026 (Responses)
@@ -1295,6 +1536,15 @@ export default function App() {
           setCustomRecords([]);
           setSheetRecords(imported);
         }}
+      />
+
+      {/* Whole Report Export Modal (PDF, PowerPoint, MS Excel) */}
+      <ExportReportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        allRecords={records}
+        filteredRecords={filteredRecords}
+        onTriggerBrowserPrint={handleTriggerBrowserPrint}
       />
     </div>
   );
