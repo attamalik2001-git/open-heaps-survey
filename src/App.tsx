@@ -37,6 +37,7 @@ import {
   ExportReportModal,
 } from './components/ExportReportModal';
 import {
+  ALL_DISTRICT_JHANG_UCS,
   ExportFormat,
   ExportProgress,
   exportReportAsExcel,
@@ -173,11 +174,12 @@ export default function App() {
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
   }, [records]);
 
-  // Distinct Union Councils (filtered by Tehsil if one is selected)
+  // Distinct Union Councils (all 91 UCs of District Jhang, filtered by Tehsil if selected)
   const ucStats = useMemo(() => {
     const map = new Map<
-      string,
+      number,
       {
+        ucSortNum: number;
         ucRaw: string;
         ucNumber: string;
         ucName: string;
@@ -190,11 +192,31 @@ export default function App() {
       }
     >();
 
+    for (const masterUc of ALL_DISTRICT_JHANG_UCS) {
+      if (selectedTehsil !== 'ALL' && masterUc.tehsil !== selectedTehsil) {
+        continue;
+      }
+      map.set(masterUc.ucSortNum, {
+        ucSortNum: masterUc.ucSortNum,
+        ucRaw: masterUc.unionCouncilFull,
+        ucNumber: masterUc.ucNumber,
+        ucName: masterUc.ucName,
+        tehsil: masterUc.tehsil,
+        recordCount: 0,
+        photoCount: 0,
+        mouzas: new Set<string>(),
+        latestTimestamp: 'Not Uploaded',
+        samplePhoto: null,
+      });
+    }
+
     for (const r of records) {
       if (selectedTehsil !== 'ALL' && r.tehsil !== selectedTehsil) continue;
-      const existing = map.get(r.unionCouncilRaw);
+      const sortNum = parseInt(r.ucNumber, 10) || 9999;
+      const existing = map.get(sortNum);
       if (!existing) {
-        map.set(r.unionCouncilRaw, {
+        map.set(sortNum, {
+          ucSortNum: sortNum,
           ucRaw: r.unionCouncilRaw,
           ucNumber: r.ucNumber,
           ucName: r.ucName,
@@ -206,19 +228,19 @@ export default function App() {
           samplePhoto: r.photos[0] || null,
         });
       } else {
+        existing.ucRaw = r.unionCouncilRaw;
+        existing.tehsil = r.tehsil || existing.tehsil;
         existing.recordCount += 1;
         existing.photoCount += r.photoCount;
         existing.mouzas.add(r.chakMouzaClean);
         existing.latestTimestamp = r.dateFormatted;
+        if (!existing.samplePhoto && r.photos[0]) {
+          existing.samplePhoto = r.photos[0];
+        }
       }
     }
 
-    return Array.from(map.values()).sort((a, b) => {
-      const numA = parseInt(a.ucNumber, 10);
-      const numB = parseInt(b.ucNumber, 10);
-      if (!Number.isNaN(numA) && !Number.isNaN(numB)) return numA - numB;
-      return a.ucRaw.localeCompare(b.ucRaw);
-    });
+    return Array.from(map.values()).sort((a, b) => a.ucSortNum - b.ucSortNum);
   }, [records, selectedTehsil]);
 
   // Distinct Survey Dates
@@ -436,7 +458,7 @@ export default function App() {
                 : 'border-transparent'
             }`}
           >
-            Chak/Mouza Wise Report
+            Hierarchical Report (All 91 UCs)
           </button>
           <button
             type="button"
@@ -1035,7 +1057,7 @@ export default function App() {
                     }`}
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    Chak/Mouza Report
+                    Hierarchical Report
                   </button>
                   <button
                     type="button"
@@ -1456,8 +1478,12 @@ export default function App() {
                   <tbody className="divide-y divide-slate-200 text-sm">
                     {ucStats.map((uc) => (
                       <tr
-                        key={uc.ucRaw}
-                        className="hover:bg-slate-50/90 transition-colors"
+                        key={uc.ucSortNum}
+                        className={
+                          uc.recordCount === 0
+                            ? 'bg-rose-50/50 hover:bg-rose-50 transition-colors'
+                            : 'hover:bg-slate-50/90 transition-colors'
+                        }
                       >
                         <td className="py-3 px-4 font-mono tabular-nums text-xs font-semibold text-slate-700">
                           UC-{uc.ucNumber}
@@ -1467,25 +1493,49 @@ export default function App() {
                         </td>
                         <td className="py-3 px-4 text-slate-700">{uc.tehsil}</td>
                         <td className="py-3 px-4 text-xs text-slate-600 max-w-md">
-                          {Array.from(uc.mouzas).join(' · ')}
+                          {uc.recordCount === 0 ? (
+                            <span className="italic text-rose-700 font-medium">
+                              No Survey Uploaded Yet
+                            </span>
+                          ) : (
+                            Array.from(uc.mouzas).join(' · ')
+                          )}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono tabular-nums text-slate-900 font-medium">
+                        <td
+                          className={`py-3 px-4 text-right font-mono tabular-nums font-medium ${
+                            uc.recordCount === 0
+                              ? 'text-rose-700'
+                              : 'text-slate-900'
+                          }`}
+                        >
                           {uc.recordCount}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono tabular-nums text-teal-700 font-semibold">
+                        <td
+                          className={`py-3 px-4 text-right font-mono tabular-nums font-semibold ${
+                            uc.photoCount === 0
+                              ? 'text-rose-700'
+                              : 'text-teal-700'
+                          }`}
+                        >
                           {uc.photoCount}
                         </td>
                         <td className="py-3 px-4 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedUc(uc.ucRaw);
-                              setActiveSection('directory');
-                            }}
-                            className="px-3 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 rounded transition-colors cursor-pointer"
-                          >
-                            View Records →
-                          </button>
+                          {uc.recordCount > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedUc(uc.ucRaw);
+                                setActiveSection('directory');
+                              }}
+                              className="px-3 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 rounded transition-colors cursor-pointer"
+                            >
+                              View Records →
+                            </button>
+                          ) : (
+                            <span className="px-3 py-1 text-xs font-mono text-rose-700">
+                              Missing (0)
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
